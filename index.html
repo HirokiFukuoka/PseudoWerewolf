@@ -53,7 +53,7 @@
       border-color: #ccc;
       color: #999;
       cursor: not-allowed;
-      pointer-events: none;
+      /* pointer-events を外して廃棄時にもクリック可能に */
     }
     #pans {
       display: flex;
@@ -65,10 +65,12 @@
       min-height: 100px;
       border: 2px dashed #888;
       padding: 10px;
+      text-align: center;      /* 中央揃え */
     }
     .pan h2 {
       margin-top: 0;
       font-size: 1.1em;
+      text-align: center;      /* 中央揃え */
     }
     #controls {
       text-align: center;
@@ -96,7 +98,8 @@
     天秤は左皿・右皿に1～16個ずつ乗せられ、結果は「左重い」「右重い」「釣り合い」のいずれか。  
     天秤を使うたびに本物コインが１個自動で消滅し、プレイヤーは任意の１個を廃棄。  
     7回以内に偽物を全廃棄できれば勝利。本物と偽物の残数が同じになると失敗です。  
-    下のコインをクリックして選択→「左に乗せる／右に乗せる」で皿に配置してください。  
+    下のコインをクリックして選択→「左に乗せる／右に乗せる」で皿に配置、  
+    または廃棄対象にできます。  
   </div>
 
   <div id="status">天秤使用: 0/7 (残り7回)</div>
@@ -117,8 +120,9 @@
   <div id="controls">
     <button id="add-left">選択を左に乗せる</button>
     <button id="add-right">選択を右に乗せる</button>
-    <button id="clear-pans">皿をクリア</button>
     <button id="weigh">天秤で量る</button>
+    <button id="clear-pans">皿をクリア</button>
+    <button id="reset" style="display:none; margin-left:10px;">次のゲーム</button>
   </div>
 
   <div id="result"></div>
@@ -128,24 +132,23 @@
     const FAKE_WEIGHT = 9;
     const MAX_WEIGHS = 7;
 
-    let coins = [];            // {id, type:'A'|'B', status:'active'|'removed'}
-    let fakesList = [];        // 偽者の番号リスト
-    let selected = new Set();  // coin ids selected for assignment
+    let coins = [];
+    let fakesList = [];
+    let selected = new Set();
     let leftPan = [], rightPan = [];
     let weighCount = 0;
     let awaitingDiscard = false;
 
     const statusDiv = document.getElementById('status');
     const resultDiv = document.getElementById('result');
+    const resetBtn = document.getElementById('reset');
 
     function clearResult() {
       resultDiv.textContent = '';
     }
-
-    function addResult(line) {
-      resultDiv.textContent += line + '\n';
+    function addResult(text) {
+      resultDiv.textContent += text + '\n';
     }
-
     function updateStatus() {
       const remain = MAX_WEIGHS - weighCount;
       statusDiv.textContent = `天秤使用: ${weighCount}/${MAX_WEIGHS} (残り${remain}回)`;
@@ -168,6 +171,12 @@
       weighCount = 0;
       awaitingDiscard = false;
 
+      // ボタン再有効化＆リセット非表示
+      ['add-left','add-right','weigh','clear-pans'].forEach(id => {
+        document.getElementById(id).disabled = false;
+      });
+      resetBtn.style.display = 'none';
+
       renderCoins();
       updatePans();
       clearResult();
@@ -179,28 +188,27 @@
       container.innerHTML = '';
       coins.forEach(c => {
         const btn = document.createElement('div');
-        let classes = ['coin'];
-        if (c.status === 'removed') classes.push('removed');
-        else if (leftPan.includes(c.id) || rightPan.includes(c.id)) classes.push('in-pan');
-        else if (selected.has(c.id)) classes.push('selected');
-        btn.className = classes.join(' ');
+        let cls = ['coin'];
+        if (c.status === 'removed') cls.push('removed');
+        else if (leftPan.includes(c.id) || rightPan.includes(c.id)) cls.push('in-pan');
+        else if (selected.has(c.id)) cls.push('selected');
+        btn.className = cls.join(' ');
         btn.textContent = c.status === 'removed' ? '' : c.id;
-        btn.dataset.id = c.id;
         btn.onclick = () => onCoinClick(c.id);
         container.appendChild(btn);
       });
     }
 
     function onCoinClick(id) {
+      const c = coins.find(x => x.id === id);
+      if (!c || c.status !== 'active') return;
+      // 廃棄フェーズなら即廃棄
       if (awaitingDiscard) {
         discardByPlayer(id);
         return;
       }
-      // 皿に乗ったものは選べない
-      if (leftPan.includes(id) || rightPan.includes(id)) return;
-      const coin = coins.find(c => c.id === id);
-      if (coin.status !== 'active') return;
-
+      // 皿クリアされるまでは皿上のものも廃棄可能なので選択可。ただし
+      // 皿に乗せるための選択ではなく、クリック→選択トグル
       if (selected.has(id)) selected.delete(id);
       else selected.add(id);
       renderCoins();
@@ -250,14 +258,14 @@
       updateStatus();
       clearResult();
 
-      // 重さを計算
+      // 重さ計算
       const sum = pan => pan.reduce((s, id) => {
         const c = coins.find(x => x.id === id);
         return s + (c.type === 'A' ? REAL_WEIGHT : FAKE_WEIGHT);
       }, 0);
       const L = sum(leftPan), R = sum(rightPan);
-      let resText = L > R ? '左が重い' : L < R ? '右が重い' : '釣り合い';
-      addResult(`天秤結果：${resText}`);
+      let res = L > R ? '左が重い' : L < R ? '右が重い' : '釣り合い';
+      addResult(`天秤結果：${res}`);
 
       // 自動消滅
       const aliveA = coins.filter(c => c.status === 'active' && c.type === 'A');
@@ -274,15 +282,14 @@
     };
 
     function discardByPlayer(id) {
-      const coin = coins.find(c => c.id === id);
-      if (!coin || coin.status !== 'active') return;
-      coin.status = 'removed';
+      const c = coins.find(x => x.id === id);
+      if (!c || c.status !== 'active') return;
+      c.status = 'removed';
       addResult(`プレイヤーが${id}番を廃棄しました`);
       awaitingDiscard = false;
       renderCoins();
       updatePans();
       checkEnd();
-      // 次ターン準備
       leftPan = [];
       rightPan = [];
     }
@@ -308,9 +315,13 @@
     }
 
     function disableAll() {
-      document.querySelectorAll('button').forEach(b => b.disabled = true);
-      awaitingDiscard = false;
+      ['add-left','add-right','weigh','clear-pans'].forEach(id => {
+        document.getElementById(id).disabled = true;
+      });
+      resetBtn.style.display = 'inline-block';
     }
+
+    resetBtn.onclick = init;
 
     // ゲーム開始
     init();
