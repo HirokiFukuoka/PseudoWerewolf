@@ -2,155 +2,275 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>コイン判別ゲーム</title>
+  <title>コインの天秤ゲーム</title>
   <style>
-    body { font-family: sans-serif; text-align: center; background: #f5f5f5; }
-    .coin { width: 40px; height: 40px; border-radius: 50%; margin: 5px; background: #ddd; display: inline-block; line-height: 40px; font-weight: bold; cursor: pointer; }
-    .selected-left { background-color: #87ceeb; }
-    .selected-right { background-color: #ffb6c1; }
-    .disabled { opacity: 0.5; pointer-events: none; }
-    #scaleResult, #log { margin-top: 20px; }
-    button { margin: 10px; }
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    #instructions {
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+    #coin-container {
+      display: grid;
+      grid-template-columns: repeat(8, 50px);
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .coin {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      border: 2px solid #444;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      background: #fafafa;
+      user-select: none;
+    }
+    .coin.removed {
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .coin.selected {
+      background: #d0eaff;
+      border-color: #3399ff;
+    }
+    #pans {
+      display: flex;
+      justify-content: space-around;
+      margin-bottom: 20px;
+    }
+    .pan {
+      width: 200px;
+      min-height: 100px;
+      border: 2px dashed #888;
+      padding: 10px;
+    }
+    .pan h2 {
+      margin-top: 0;
+      font-size: 1.1em;
+    }
+    #controls {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    #controls button {
+      margin: 0 5px;
+      padding: 8px 12px;
+      font-size: 1em;
+    }
+    #result {
+      text-align: center;
+      font-size: 1.2em;
+      min-height: 1.5em;
+    }
   </style>
 </head>
 <body>
+  <h1>コインの天秤ゲーム</h1>
+  <div id="instructions">
+    16個のコインのうち12個は本物（A）、4個は偽物（B）です。重さは2種類のみ。  
+    天秤は左皿・右皿に1～16個ずつ乗せられ、結果は「左重い」「右重い」「釣り合い」のいずれか。  
+    天秤を使うたびに本物コインが１個自動で消滅し、プレイヤーは任意の１個を廃棄。  
+    7回以内に偽物を全廃棄できれば勝利。本物と偽物の残数が同じになると失敗です。  
+    下のコインをクリックして選択し、「選択を左に乗せる／右に乗せる」で天秤の皿に置いてください。  
+  </div>
 
-<h2>🔍 コイン判別ゲーム</h2>
-<div id="coins"></div>
+  <div id="coin-container"></div>
 
-<p>左の皿に乗せる → 青色、右の皿に乗せる → ピンク色</p>
+  <div id="pans">
+    <div class="pan">
+      <h2>左の皿</h2>
+      <div id="left-list"></div>
+    </div>
+    <div class="pan">
+      <h2>右の皿</h2>
+      <div id="right-list"></div>
+    </div>
+  </div>
 
-<button onclick="useScale()">天秤を使う</button>
-<p id="scaleResult"></p>
+  <div id="controls">
+    <button id="add-left">選択を左に乗せる</button>
+    <button id="add-right">選択を右に乗せる</button>
+    <button id="clear-pans">皿をクリア</button>
+    <button id="weigh">天秤で量る</button>
+  </div>
 
-<p>廃棄するコイン番号を選択（残り天秤回数 <span id="scaleCount">7</span>）</p>
-<select id="discardSelect"></select>
-<button onclick="discard()">コインを廃棄</button>
+  <div id="result"></div>
 
-<div id="log"></div>
+  <script>
+    const REAL_WEIGHT = 10;
+    const FAKE_WEIGHT = 9;
 
-<script>
-const coinCount = 16;
-let coins = [];
-let leftPan = [];
-let rightPan = [];
-let scaleUses = 7;
-let destroyedThisTurn = false;
+    let coins = [];            // {id, type:'A'|'B', status:'active'|'removed'}
+    let selected = new Set();  // coin ids selected for assignment
+    let leftPan = [], rightPan = [];
+    let weighCount = 0;
+    let awaitingDiscard = false;
 
-function init() {
-  coins = [];
-  for (let i = 1; i <= coinCount; i++) {
-    coins.push({ id: i, type: 'A', weight: 10 });
-  }
-  // ランダムに偽物Bを4つ選定
-  let fakeIndexes = [];
-  while (fakeIndexes.length < 4) {
-    let idx = Math.floor(Math.random() * coinCount);
-    if (!fakeIndexes.includes(idx)) fakeIndexes.push(idx);
-  }
-  fakeIndexes.forEach(i => {
-    coins[i].type = 'B';
-    coins[i].weight = 7;
-  });
-  renderCoins();
-}
+    function init() {
+      // コイン初期化
+      coins = [];
+      for (let i = 1; i <= 16; i++) {
+        coins.push({ id: i, type: 'A', status: 'active' });
+      }
+      // ランダムに4つを偽物に
+      let fakes = new Set();
+      while (fakes.size < 4) {
+        fakes.add(Math.ceil(Math.random() * 16));
+      }
+      coins.forEach(c => { if (fakes.has(c.id)) c.type = 'B'; });
 
-function renderCoins() {
-  const container = document.getElementById('coins');
-  container.innerHTML = '';
-  leftPan = [];
-  rightPan = [];
-  destroyedThisTurn = false;
+      selected.clear();
+      leftPan = [];
+      rightPan = [];
+      weighCount = 0;
+      awaitingDiscard = false;
 
-  coins.forEach(coin => {
-    const btn = document.createElement('div');
-    btn.className = 'coin';
-    btn.innerText = coin.id;
-    btn.onclick = () => selectCoin(coin.id);
-    container.appendChild(btn);
-  });
-
-  updateDiscardOptions();
-  document.getElementById('scaleResult').innerText = '';
-}
-
-function selectCoin(id) {
-  const coinEl = document.querySelectorAll('.coin')[id - 1];
-  if (!coinEl.classList.contains('selected-left') && !coinEl.classList.contains('selected-right')) {
-    if (leftPan.length <= rightPan.length) {
-      leftPan.push(id);
-      coinEl.classList.add('selected-left');
-    } else {
-      rightPan.push(id);
-      coinEl.classList.add('selected-right');
+      renderCoins();
+      updatePans();
+      setResult('');
     }
-  }
-}
 
-function useScale() {
-  if (scaleUses <= 0 || destroyedThisTurn) return;
-  const leftWeight = leftPan.reduce((sum, id) => sum + getCoin(id).weight, 0);
-  const rightWeight = rightPan.reduce((sum, id) => sum + getCoin(id).weight, 0);
-  let result = '';
-  if (leftWeight > rightWeight) result = '⚖️ 天秤は左に傾きました';
-  else if (leftWeight < rightWeight) result = '⚖️ 天秤は右に傾きました';
-  else result = '⚖️ 天秤は釣り合いました';
+    function renderCoins() {
+      const container = document.getElementById('coin-container');
+      container.innerHTML = '';
+      coins.forEach(c => {
+        const btn = document.createElement('div');
+        btn.className = 'coin' + (c.status === 'removed' ? ' removed' : '');
+        btn.textContent = c.status==='removed' ? '' : c.id;
+        btn.dataset.id = c.id;
+        btn.onclick = () => onCoinClick(c.id);
+        container.appendChild(btn);
+      });
+    }
 
-  document.getElementById('scaleResult').innerText = result;
+    function onCoinClick(id) {
+      if (awaitingDiscard) {
+        // 廃棄フェーズ
+        discardByPlayer(id);
+        return;
+      }
+      const coin = coins.find(c => c.id === id);
+      if (coin.status !== 'active') return;
+      // 選択トグル
+      if (selected.has(id)) {
+        selected.delete(id);
+      } else {
+        selected.add(id);
+      }
+      renderCoins(); // toggle class
+      selected.forEach(i => {
+        const el = document.querySelector(`.coin[data-id="${i}"]`);
+        el.classList.add('selected');
+      });
+    }
 
-  // 自動消滅：Aで確信度の高いもの
-  const safeA = coins.filter(c => c.type === 'A');
-  if (safeA.length > 0) {
-    const destroyed = safeA[Math.floor(Math.random() * safeA.length)];
-    destroyCoin(destroyed.id, true);
-  }
+    function updatePans() {
+      document.getElementById('left-list').textContent = leftPan.join(', ');
+      document.getElementById('right-list').textContent = rightPan.join(', ');
+    }
 
-  scaleUses--;
-  document.getElementById('scaleCount').innerText = scaleUses;
-  destroyedThisTurn = true;
-  checkWinOrLose();
-}
+    function setResult(msg) {
+      document.getElementById('result').textContent = msg;
+    }
 
-function updateDiscardOptions() {
-  const select = document.getElementById('discardSelect');
-  select.innerHTML = '';
-  coins.forEach(c => {
-    let opt = document.createElement('option');
-    opt.value = c.id;
-    opt.text = `${c.id}番`;
-    select.appendChild(opt);
-  });
-}
+    document.getElementById('add-left').onclick = () => {
+      selected.forEach(id => {
+        if (!leftPan.includes(id) && !rightPan.includes(id)) leftPan.push(id);
+      });
+      selected.clear();
+      renderCoins();
+      updatePans();
+    };
+    document.getElementById('add-right').onclick = () => {
+      selected.forEach(id => {
+        if (!rightPan.includes(id) && !leftPan.includes(id)) rightPan.push(id);
+      });
+      selected.clear();
+      renderCoins();
+      updatePans();
+    };
+    document.getElementById('clear-pans').onclick = () => {
+      leftPan = [];
+      rightPan = [];
+      setResult('');
+      updatePans();
+    };
 
-function discard() {
-  const id = parseInt(document.getElementById('discardSelect').value);
-  destroyCoin(id, false);
-  renderCoins();
-  checkWinOrLose();
-}
+    document.getElementById('weigh').onclick = () => {
+      if (awaitingDiscard) return;
+      if (leftPan.length === 0 && rightPan.length === 0) {
+        setResult('皿にコインを乗せてください');
+        return;
+      }
+      weighCount++;
+      // 重さ計算
+      const sum = pan => pan.reduce((acc,id)=>{
+        const c = coins.find(x=>x.id===id);
+        return acc + (c.type==='A'?REAL_WEIGHT:FAKE_WEIGHT);
+      }, 0);
+      const L = sum(leftPan), R = sum(rightPan);
+      let resText = '';
+      if (L > R) resText = '左が重い';
+      else if (L < R) resText = '右が重い';
+      else resText = '釣り合い';
+      setResult(`天秤結果：${resText}`);
 
-function getCoin(id) {
-  return coins.find(c => c.id === id);
-}
+      // 自動消滅
+      const aliveA = coins.filter(c=>c.status==='active'&&c.type==='A');
+      if (aliveA.length) {
+        const drop = aliveA[Math.floor(Math.random()*aliveA.length)];
+        drop.status = 'removed';
+        setResult(resText + `\n自動で${drop.id}番のコインが消えました`);
+      }
 
-function destroyCoin(id, auto) {
-  coins = coins.filter(c => c.id !== id);
-  const log = document.getElementById('log');
-  const msg = auto ? `🧨 ${id}番のコインが自動的に消滅しました` : `🗑️ ${id}番のコインを廃棄しました`;
-  log.innerHTML += `<p>${msg}</p>`;
-}
+      // 廃棄待ちに移行
+      awaitingDiscard = true;
+      setResult(prev => prev + '\nプレイヤーは１つ廃棄してください');
+      renderCoins();
+      updatePans();
+    };
 
-function checkWinOrLose() {
-  const remainingA = coins.filter(c => c.type === 'A').length;
-  const remainingB = coins.filter(c => c.type === 'B').length;
-  if (remainingB === 0) {
-    alert('🎉 勝利！偽物Bをすべて廃棄しました');
-  } else if (remainingA === remainingB) {
-    alert('💥 失敗！AとBの数が同数になりました');
-  }
-}
+    function discardByPlayer(id) {
+      const coin = coins.find(c=>c.id===id);
+      if (!coin || coin.status!=='active') return;
+      coin.status = 'removed';
+      awaitingDiscard = false;
+      setResult(prev => prev + `\nプレイヤーが${id}番を廃棄しました`);
+      renderCoins(); updatePans();
+      checkEnd();
+      // 次のターン準備
+      leftPan = []; rightPan = [];
+    }
 
-init();
-</script>
+    function checkEnd() {
+      const alive = coins.filter(c=>c.status==='active');
+      const cntA = alive.filter(c=>c.type==='A').length;
+      const cntB = alive.filter(c=>c.type==='B').length;
+      if (cntB === 0) {
+        setResult('あなたの勝利！偽物を全廃棄しました');
+        disableAll();
+      } else if (cntA === cntB) {
+        setResult('失敗！本物と偽物の残数が同じになりました');
+        disableAll();
+      }
+    }
+
+    function disableAll() {
+      document.querySelectorAll('button').forEach(b=>b.disabled=true);
+      awaitingDiscard = false;
+    }
+
+    // ゲーム開始
+    init();
+  </script>
 </body>
 </html>
