@@ -65,11 +65,12 @@
     #message {
       margin-top: 10px;
       color: #c00;
+      min-height: 1.2em;
     }
   </style>
 </head>
 <body>
-  <h1>16</h1>
+  <h1>16コイン天秤ゲーム</h1>
   <div id="info"></div>
 
   <div id="scale">
@@ -88,23 +89,19 @@
 
   <script>
     (function() {
-      // 重さ（内部用）
       const A_WEIGHT = 10;
       const B_WEIGHT = 5;
-
       let coins = [];
       let weighCount = 0;
       let phase = 'selection'; // 'selection' or 'discard'
 
-      // ページ読み込み後に初期化
       window.onload = init;
 
       function init() {
-        // コイン生成（12×A, 4×B）→シャッフル
         coins = [];
+        // コインはソートされたまま（1〜12:A、13〜16:B）
         for (let i = 1; i <= 12; i++) coins.push({ id: i, type: 'A', status: 'alive', selected: null });
         for (let i = 13; i <= 16; i++) coins.push({ id: i, type: 'B', status: 'alive', selected: null });
-        shuffle(coins);
         weighCount = 0;
         phase = 'selection';
         bindButtons();
@@ -112,26 +109,18 @@
       }
 
       function bindButtons() {
-        document.getElementById('weigh-btn').onclick = onWeigh;
+        document.getElementById('weigh-btn').onclick   = onWeigh;
         document.getElementById('discard-btn').onclick = onDiscard;
       }
 
-      function shuffle(arr) {
-        for (let i = arr.length - 1; i > 0; i--) {
-          let j = Math.floor(Math.random() * (i + 1));
-          [arr[i], arr[j]] = [arr[j], arr[i]];
-        }
-      }
-
-      // 画面描画
       function render() {
-        // 上部情報
-        const aliveA = coins.filter(c => c.type === 'A' && c.status === 'alive').length;
-        const aliveB = coins.filter(c => c.type === 'B' && c.status === 'alive').length;
+        // 情報表示
+        const aliveA = coins.filter(c => c.type==='A' && c.status==='alive').length;
+        const aliveB = coins.filter(c => c.type==='B' && c.status==='alive').length;
         document.getElementById('info').textContent =
           `残りA: ${aliveA} 個　残りB: ${aliveB} 個　天秤残り回数: ${7 - weighCount}`;
 
-        // コイン一覧
+        // コイン描画
         const coinsDiv = document.getElementById('coins');
         coinsDiv.innerHTML = '';
         coins.forEach(c => {
@@ -153,13 +142,11 @@
         // ボタン制御
         document.getElementById('weigh-btn').disabled   = (phase !== 'selection' || weighCount >= 7);
         document.getElementById('discard-btn').disabled = (phase !== 'discard');
-        document.getElementById('message').textContent  = '';
         // 皿ラベルリセット
         document.getElementById('left-pan').textContent  = '左皿';
         document.getElementById('right-pan').textContent = '右皿';
       }
 
-      // コインクリック
       function onCoinClick(id) {
         const coin = coins.find(c => c.id === id);
         if (coin.status !== 'alive') return;
@@ -170,17 +157,16 @@
           else if (coin.selected === 'left') coin.selected = 'right';
           else coin.selected = null;
         } else {
-          // 廃棄フェーズ：1枚だけ discard
-          coins.forEach(c => { if (c.status === 'alive') c.selected = null; });
+          // 廃棄フェーズ：1 枚だけ discard
+          coins.forEach(c => { if (c.status==='alive') c.selected = null; });
           coin.selected = 'discard';
         }
         render();
       }
 
-      // 天秤にかける
       function onWeigh() {
-        const leftCoins  = coins.filter(c => c.status === 'alive' && c.selected === 'left');
-        const rightCoins = coins.filter(c => c.status === 'alive' && c.selected === 'right');
+        const leftCoins  = coins.filter(c => c.status==='alive' && c.selected==='left');
+        const rightCoins = coins.filter(c => c.status==='alive' && c.selected==='right');
         if (leftCoins.length + rightCoins.length === 0) {
           showMessage('まず皿に乗せるコインを選んでください');
           return;
@@ -199,9 +185,9 @@
         document.getElementById('right-pan').textContent = `右皿 (${rightCoins.length} 枚)`;
 
         // 自動A廃棄
-        const aliveAs = coins.filter(c => c.type === 'A' && c.status === 'alive');
+        const aliveAs = coins.filter(c => c.type==='A' && c.status==='alive');
         if (aliveAs.length > 0) {
-          const pick = aliveAs[Math.floor(Math.random()*aliveAs.length)];
+          const pick = aliveAs[Math.floor(Math.random() * aliveAs.length)];
           pick.status = 'auto-removed';
           pick.selected = null;
         }
@@ -210,7 +196,6 @@
         render();
       }
 
-      // コイン廃棄
       function onDiscard() {
         const target = coins.find(c => c.selected === 'discard');
         if (!target) {
