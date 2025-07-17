@@ -41,15 +41,19 @@
       margin-bottom: 10px;
     }
     .coin {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
       width: 40px;
       height: 40px;
       background: #eee;
       border: 1px solid #999;
       border-radius: 50%;
-      line-height: 40px;
+      line-height: 1;
       text-align: center;
       cursor: pointer;
       user-select: none;
+      box-sizing: border-box;
     }
     .coin.left   { background: #cce5ff; }
     .coin.right  { background: #ffdede; }
@@ -162,7 +166,6 @@
           const el = document.createElement('div');
           el.className = 'coin';
           el.textContent = c.id;
-          // 状態に応じた色
           if (c.status === 'alive') {
             if (c.selected === 'left')  el.classList.add('left');
             if (c.selected === 'right') el.classList.add('right');
@@ -173,7 +176,6 @@
           }
           el.onclick = () => onCoinClick(c.id);
 
-          // 選択中のものは皿へ、それ以外は下部リストへ
           if (c.status === 'alive' && c.selected === 'left') {
             leftPan.appendChild(el);
           } else if (c.status === 'alive' && c.selected === 'right') {
@@ -183,7 +185,6 @@
           }
         });
 
-        // ボタン制御
         document.getElementById('weigh-btn').disabled   = (phase !== 'selection' || weighCount >= 7);
         document.getElementById('discard-btn').disabled = (phase !== 'discard');
         document.getElementById('message').textContent  = '';
@@ -194,12 +195,10 @@
         if (coin.status !== 'alive') return;
 
         if (phase === 'selection') {
-          // none → left → right → none
           if (coin.selected === null)      coin.selected = 'left';
           else if (coin.selected === 'left')  coin.selected = 'right';
           else                               coin.selected = null;
         } else {
-          // 廃棄フェーズ：1枚だけ discard
           coins.forEach(c => { if (c.status === 'alive') c.selected = null; });
           coin.selected = 'discard';
         }
@@ -208,14 +207,14 @@
 
       function onWeigh() {
         const leftCoins  = coins.filter(c => c.status==='alive' && c.selected==='left');
-        const rightCoins = coins.filter(c => c.status==='alive' && c.selected==='right']);
+        const rightCoins = coins.filter(c => c.status==='alive' && c.selected==='right');
         if (leftCoins.length + rightCoins.length === 0) {
           return showMessage('まず皿に乗せるコインを選んでください');
         }
 
         weighCount++;
-        const sumLeft  = leftCoins.reduce((s,c)=>s+(c.type==='A'?A_WEIGHT:B_WEIGHT),0);
-        const sumRight = rightCoins.reduce((s,c)=>s+(c.type==='A'?A_WEIGHT:B_WEIGHT),0);
+        const sumLeft  = leftCoins.reduce((s,c)=>s + (c.type==='A'?A_WEIGHT:B_WEIGHT), 0);
+        const sumRight = rightCoins.reduce((s,c)=>s + (c.type==='A'?A_WEIGHT:B_WEIGHT), 0);
         let result = '釣り合った';
         if (sumLeft < sumRight) result = '左が軽い';
         if (sumLeft > sumRight) result = '右が軽い';
@@ -240,7 +239,6 @@
         target.status = 'discarded';
         target.selected = null;
 
-        // 勝敗判定
         const aliveA = coins.filter(c => c.type==='A' && c.status==='alive').length;
         const aliveB = coins.filter(c => c.type==='B' && c.status==='alive').length;
         if (aliveB === 0 && aliveA > 0) {
