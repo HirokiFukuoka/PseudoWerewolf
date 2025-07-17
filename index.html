@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>16コイン偽金探しゲーム</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin: 20px;
+    }
+    #coins {
+      margin: 20px auto;
+      width: 360px;
+    }
+    .coin {
+      width: 40px;
+      height: 40px;
+      line-height: 40px;
+      border: 1px solid #333;
+      border-radius: 50%;
+      display: inline-block;
+      margin: 5px;
+      cursor: pointer;
+      user-select: none;
+      background-color: #eee;
+    }
+    .left {
+      background-color: lightblue;
+    }
+    .right {
+      background-color: lightcoral;
+    }
+    #status {
+      margin: 10px;
+      min-height: 1.2em;
+    }
+    button {
+      margin: 5px;
+      padding: 8px 12px;
+      font-size: 1em;
+    }
+  </style>
+</head>
+<body>
+  <h1>16コイン偽金探しゲーム</h1>
+  <div id="info">
+    <div>残り本物(A): <span id="countA">12</span> ／ 残り偽物(B): <span id="countB">4</span></div>
+    <div>天秤使用回数: <span id="weighCount">0</span> / 7</div>
+  </div>
+
+  <div id="status">左パン・右パンに載せるコインを選択し、「Weigh」ボタンを押してください。</div>
+
+  <div id="coins"></div>
+
+  <button id="weighBtn">Weigh</button>
+
+  <script>
+    // ゲーム状態
+    const MAX_WEIGHS = 7;
+    let coins = []; // { id, type:'A'|'B', alive }
+    let weighCount = 0;
+    let state = 'weigh'; // 'weigh' or 'discard'
+
+    // 初期化
+    function init() {
+      // 12 A, 4 B をランダムに配置
+      const arr = Array(12).fill('A').concat(Array(4).fill('B'));
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      coins = arr.map((type, idx) => ({ id: idx, type, alive: true, side: null }));
+      render();
+    }
+
+    // UIレンダリング
+    function render() {
+      document.getElementById('countA').textContent = coins.filter(c => c.alive && c.type==='A').length;
+      document.getElementById('countB').textContent = coins.filter(c => c.alive && c.type==='B').length;
+      document.getElementById('weighCount').textContent = weighCount;
+
+      const container = document.getElementById('coins');
+      container.innerHTML = '';
+      coins.forEach(c => {
+        if (!c.alive) return;
+        const div = document.createElement('div');
+        div.className = 'coin';
+        if (c.side==='left')  div.classList.add('left');
+        if (c.side==='right') div.classList.add('right');
+        div.textContent = c.id + 1;
+        div.addEventListener('click', () => onClickCoin(c.id));
+        container.appendChild(div);
+      });
+
+      // 状態に応じてメッセージとボタン制御
+      const status = document.getElementById('status');
+      const weighBtn = document.getElementById('weighBtn');
+      if (state === 'weigh') {
+        status.textContent = '左パン・右パンに載せるコインを選択し、「Weigh」ボタンを押してください。';
+        weighBtn.disabled = weighCount >= MAX_WEIGHS;
+        weighBtn.style.display = 'inline-block';
+      } else {
+        status.textContent = 'コインを1つクリックして廃棄してください。';
+        weighBtn.style.display = 'none';
+      }
+      checkEnd();
+    }
+
+    // コインをクリック
+    function onClickCoin(id) {
+      const coin = coins.find(c => c.id === id);
+      if (!coin.alive) return;
+
+      if (state === 'weigh') {
+        // none -> left -> right -> none
+        if (coin.side === null) coin.side = 'left';
+        else if (coin.side === 'left') coin.side = 'right';
+        else coin.side = null;
+        render();
+      } else {
+        // 廃棄モード
+        coin.alive = false;
+        coin.side = null;
+        // 自動的に本物Aを1枚消す
+        removeRandomA();
+        weighCount++;
+        state = 'weigh';
+        clearSides();
+        render();
+      }
+    }
+
+    // Weighボタン押下
+    document.getElementById('weighBtn').addEventListener('click', () => {
+      // 両パンの重量を計算
+      const leftW  = coins.filter(c=>c.alive && c.side==='left').reduce((s,c)=> s + (c.type==='A'?1:0),0);
+      const rightW = coins.filter(c=>c.alive && c.side==='right').reduce((s,c)=> s + (c.type==='A'?1:0),0);
+      let result = 'Balance';
+      if (leftW > rightW) result = 'Left ↓';
+      if (leftW < rightW) result = 'Right ↓';
+
+      document.getElementById('status').textContent = `天秤結果: ${result}`;
+      state = 'discard';
+      render();
+    });
+
+    // 本物(A)をランダムに1枚消去
+    function removeRandomA() {
+      const aliveAs = coins.filter(c => c.alive && c.type==='A');
+      if (aliveAs.length === 0) return;
+      const pick = aliveAs[Math.floor(Math.random() * aliveAs.length)];
+      pick.alive = false;
+      pick.side = null;
+    }
+
+    // 選択パンをクリア
+    function clearSides() {
+      coins.forEach(c => c.side = null);
+    }
+
+    // 勝敗判定
+    function checkEnd() {
+      const aCount = coins.filter(c=>c.alive&&c.type==='A').length;
+      const bCount = coins.filter(c=>c.alive&&c.type==='B').length;
+      if (bCount === 0 && aCount > 0) {
+        alert(`Victory! Bを全廃棄しました。（天秤使用 ${weighCount} 回）`);
+        disableAll();
+      } else if (aCount === bCount) {
+        alert(`Failure… AとBが同数になりました。`);
+        disableAll();
+      } else if (weighCount >= MAX_WEIGHS && state==='weigh') {
+        alert(`Failure… 天秤を使える回数がなくなりました。`);
+        disableAll();
+      }
+    }
+
+    function disableAll() {
+      state = 'end';
+      document.getElementById('weighBtn').disabled = true;
+    }
+
+    // 起動
+    init();
+  </script>
+</body>
+</html>
