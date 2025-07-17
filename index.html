@@ -10,10 +10,10 @@
     }
     h1 {
       text-align: center;
-      margin-bottom: 5px;
+      margin-bottom: 15px;
     }
     #instructions {
-      margin-bottom: 10px;
+      margin-bottom: 15px;
       line-height: 1.5;
       text-align: center;
     }
@@ -95,11 +95,13 @@
 <body>
   <h1>擬似人狼ゲーム</h1>
   <div id="instructions">
-    16枚のコインのうち12枚は本物、4枚は偽物です。本物は偽物よりも僅かに重いです。<br>
+    16枚のコインのうち12枚は本物、4枚は偽物です。<br>
+    本物は偽物よりも僅かに重いです。<br>
     天秤は左皿・右皿に、コインを何枚でも乗せられます。<br>
     天秤を使うたびに、本物コインが１枚自動で消滅します。<br>
     次に、あなたは任意の１枚を廃棄します。<br>
-    7回以内に偽物を全廃棄できれば成功。本物と偽物の残数が同じになると失敗です。<br>
+    7回以内に偽物を全廃棄できれば成功。<br>
+    本物と偽物の残数が同じになると失敗です。<br>
   </div>
 
   <div id="status">天秤使用: 0/7 (残り7回)</div>
@@ -267,7 +269,7 @@
         addResult(`自動で${drop.id}番の本物コインが消えました`);
       }
 
-      addResult('１つ廃棄してください');
+      addResult('任意のコインを１枚廃棄してください');
       awaitingDiscard = true;
       renderCoins();
       updatePans();
